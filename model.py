@@ -123,7 +123,7 @@ class PMF(nn.Module):
                 u = torch.tensor(test_list[i][0])
                 user_embed, test_items_embed = self.encode(u, test_items_t, filters)
                 R = (user_embed * test_items_embed).sum(1)
-                score = R.cpu().numpy().tolist()
+                score = R.cpu().detach().numpy().tolist()
                 item_score = dict(zip(test_items, score))
                 item_score = sorted(item_score.items(), key=lambda item: item[1], reverse=True)
                 item_score = dict(item_score[:5])

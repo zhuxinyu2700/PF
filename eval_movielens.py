@@ -40,32 +40,6 @@ def multiclass_roc_auc_score(y_test, y_pred, average="micro"):
     y_test = lb.transform(y_test)
     return roc_auc_score(y_test, y_pred, average=average)
 
-def test_random(args,test_dataset,modelD,net,experiment,\
-        epoch,filter_set=None):
-    test_loader = DataLoader(test_dataset, num_workers=1, batch_size=512)
-    correct = 0
-    preds_list, probs_list, labels_list = [], [],[]
-    for p_batch in test_loader:
-        p_batch_var = Variable(p_batch).cuda()
-        p_batch_emb = modelD.encode(p_batch_var.detach(),filter_set)
-        y_hat, y = net.predict(p_batch_emb,p_batch_var)
-        preds = (y_hat > torch.Tensor([0.5]).cuda()).float() * 1
-        correct += preds.eq(y.view_as(preds)).sum().item()
-        preds_list.append(preds)
-        probs_list.append(y_hat)
-        labels_list.append(y)
-    cat_preds_list = torch.cat(preds_list,0).data.cpu().numpy()
-    cat_labels_list = torch.cat(labels_list,0).data.cpu().numpy()
-    cat_probs_list = torch.cat(probs_list,0).data.cpu().numpy()
-    AUC = roc_auc_score(cat_labels_list,cat_probs_list,average="micro")
-    acc = 100. * correct / len(test_dataset)
-    f1 = f1_score(cat_labels_list,cat_preds_list,average='binary')
-    print("Test Random Accuracy is: %f AUC: %f F1: %f" %(acc,AUC,f1))
-    if args.do_log:
-        experiment.log_metric("Test"+net.attribute+" AUC",float(AUC),step=epoch)
-        experiment.log_metric("Test "+net.attribute+" Accuracy",float(acc),step=epoch)
-        experiment.log_metric("Test "+net.attribute+" F1",float(f1),step=epoch)
-
 def test_gender(args,test_dataset,modelD,net,experiment,\
         epoch,filter_set=None):
     test_loader = DataLoader(test_dataset, num_workers=1, batch_size=512)
