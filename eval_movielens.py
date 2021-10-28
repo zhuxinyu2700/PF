@@ -264,7 +264,6 @@ def test_pmf(dataset, args, modelD,filter_set=None):
     hit_list = []
     ndcg_list = []
     for idx, p_batch in data_itr:
-        #p_batch_var = Variable(p_batch).cuda()
         p_batch_var = Variable(p_batch).cuda()
         test_loss, hit, ndcg = modelD(p_batch_var,return_nh=True,filters=filter_set)
         test_loss_list.append(test_loss)

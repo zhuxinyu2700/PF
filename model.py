@@ -110,14 +110,14 @@ class PMF(nn.Module):
             ndcg = 0
             for i in range(len(test_list)):
                 r = []
-                test_items = np.random.randint(low=0, high=self.num_items, size=20)
+                test_items = np.random.randint(low=0, high=self.num_items, size=100)
                 test_items = test_items.tolist()
-                '''j = 0
+                j = 0
                 while j < len(test_items):
                     if test_items[j] in user_dict[str(test_list[i][0])]:
                         del test_items[j]
                     else:
-                        j += 1'''
+                        j += 1
                 test_items.append(test_list[i][2])
                 test_items_t = torch.LongTensor(test_items).cuda()
                 u = torch.tensor(test_list[i][0]).cuda()
@@ -127,8 +127,8 @@ class PMF(nn.Module):
                 score = R.cpu().detach().numpy().tolist()
                 item_score = dict(zip(test_items, score))
                 item_score = sorted(item_score.items(), key=lambda item: item[1], reverse=True)
-                item_score = dict(item_score[:10])
-                if str(test_list[i][2]) in item_score:
+                item_score = dict(item_score[:5])
+                if test_list[i][2] in item_score.keys():
                     r.append(1)
                 else:
                     r.append(0)
