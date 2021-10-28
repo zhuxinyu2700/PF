@@ -1,12 +1,11 @@
 import numpy as np
 import pandas as pd
-import ipdb
 
 def make_dataset_1M(load_sidechannel=False):
     r_cols = ['user_id', 'movie_id', 'rating', 'unix_timestamp']
     ratings = pd.read_csv('./ml-1m/ratings.dat', sep='::', names=r_cols,encoding='latin-1')
     shuffled_ratings = ratings.sample(frac=1).reset_index(drop=True)
-    train_cutoff_row = int(np.round(len(shuffled_ratings)*0.9))
+    train_cutoff_row = int(np.round(len(shuffled_ratings)*0.8))
     train_ratings = shuffled_ratings[:train_cutoff_row]
     test_ratings = shuffled_ratings[train_cutoff_row:]
     if load_sidechannel:

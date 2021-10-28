@@ -78,26 +78,26 @@ class PMF(nn.Module):
         self.items_embed.weight.data = torch.from_numpy(0.1 * self.random_state.rand(num_items, enbed_dim)).float()
         self.criterion = nn.LogSigmoid()
 
-    def encode(self, users, items, filters=None):
+    def encode(self, users, filters=None):
         users_embed = self.users_embed(users)
         if filters is not None:
             constant = len(filters) - filters.count(None)
             if constant != 0:
                 users_embed = apply_filters(users_embed, filters)
-        items_embed = self.items_embed(items)
-        return users_embed, items_embed
+        return users_embed
 
     def forward(self, batch, return_embed=False,return_nh=False, filters = None):
         users, items = batch[:,0], batch[:,2]
         neg_items = []
-        users_embed, items_embed = self.encode(users, items, filters)
+        users_embed = self.encode(users, filters)
+        items_embed = self.items_embed(items)
         for u in users:
             neg_item = np.random.randint(low=0, high=self.num_items, size=1)[0]
             while neg_item in user_dict[str(u.item())]:
                 neg_item = np.random.randint(low=0, high=self.num_items, size=1)[0]
             else:
                 neg_items.append(neg_item)
-        neg_items = torch.LongTensor(neg_items)
+        neg_items = torch.LongTensor(neg_items).cuda()
         neg_items_embed = self.items_embed(neg_items)
         R_neg = (users_embed * neg_items_embed).sum(1)
         R_pos = (users_embed * items_embed).sum(1)
@@ -108,9 +108,9 @@ class PMF(nn.Module):
             test_list = batch.cpu().numpy().tolist()
             hit = 0
             ndcg = 0
-            r = []
             for i in range(len(test_list)):
-                test_items = np.random.randint(low=0, high=self.num_items, size=100)
+                r = []
+                test_items = np.random.randint(low=0, high=self.num_items, size=20)
                 test_items = test_items.tolist()
                 j = 0
                 while j < len(test_items):
@@ -119,20 +119,21 @@ class PMF(nn.Module):
                     else:
                         j += 1
                 test_items.append(test_list[i][2])
-                test_items_t = torch.LongTensor(test_items)
-                u = torch.tensor(test_list[i][0])
-                user_embed, test_items_embed = self.encode(u, test_items_t, filters)
+                test_items_t = torch.LongTensor(test_items).cuda()
+                u = torch.tensor(test_list[i][0]).cuda()
+                user_embed = self.encode(u, filters)
+                test_items_embed = self.items_embed(test_items_t)
                 R = (user_embed * test_items_embed).sum(1)
                 score = R.cpu().detach().numpy().tolist()
                 item_score = dict(zip(test_items, score))
                 item_score = sorted(item_score.items(), key=lambda item: item[1], reverse=True)
-                item_score = dict(item_score[:5])
+                item_score = dict(item_score[:10])
                 if str(test_list[i][2]) in item_score:
                     r.append(1)
                 else:
                     r.append(0)
-            hit += hit_at_k(r)
-            ndcg += ndcg_at_k(r,method=1)
+                hit += hit_at_k(r)
+                ndcg += ndcg_at_k(r, method=1)
             return loss, hit/len(test_list), ndcg/len(test_list)
         else:
             return loss, users_embed, items_embed

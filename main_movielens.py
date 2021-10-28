@@ -23,7 +23,6 @@ from preprocess_movie_lens import *
 from transD_movielens import *
 import joblib
 from collections import Counter, OrderedDict
-import ipdb
 sys.path.append('../')
 import gc
 from model import *
@@ -42,12 +41,12 @@ def parse_args():
     parser.add_argument('--project_name', type=str, default=" ", help="Comet project_name")
     parser.add_argument('--workspace', type=str, default=" ", help="Comet Workspace")
     parser.add_argument('--D_steps', type=int, default=10, help='Number of D steps')
-    parser.add_argument('--num_epochs', type=int, default=100, help='Number of training epochs (default: 500)')
+    parser.add_argument('--num_epochs', type=int, default=5, help='Number of training epochs (default: 500)')
     parser.add_argument('--num_classifier_epochs', type=int, default=100, help='Number of training epochs (default: 500)')
-    parser.add_argument('--batch_size', type=int, default=512, help='Batch size (default: 512)')
+    parser.add_argument('--batch_size', type=int, default=1024, help='Batch size (default: 512)')
     parser.add_argument('--dropout_p', type=float, default=0.2, help='Batch size (default: 512)')
     parser.add_argument('--gamma', type=int, default=10, help='Tradeoff for Adversarial Penalty')
-    parser.add_argument('--valid_freq', type=int, default=5, help='Validate frequency in epochs (default: 50)')
+    parser.add_argument('--valid_freq', type=int, default=1, help='Validate frequency in epochs (default: 50)')
     parser.add_argument('--print_freq', type=int, default=5, help='Print frequency in epochs (default: 5)')
     parser.add_argument('--embed_dim', type=int, default=30, help='Embedding dimension (default: 50)')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate (default: 0.001)')
@@ -198,24 +197,49 @@ def main(args):
                         test_loss, test_hit, test_ndcg = test_pmf(test_set,args,modelD,filter_set)
 
                 if args.use_attr:
-                    test_gender(args,test_fairness_set,modelD,fairD_gender,epoch,filter_set)
-                    test_occupation(args,test_fairness_set,modelD,fairD_occupation,epoch,filter_set)
-                    test_age(args,test_fairness_set,modelD,fairD_age,epoch,filter_set)
-                elif args.use_gender_attr:
-                    test_gender(args,test_fairness_set,modelD,fairD_gender,epoch,filter_set)
-                elif args.use_occ_attr:
-                    test_occupation(args,test_fairness_set,modelD,fairD_occupation,epoch,filter_set)
-                elif args.use_age_attr:
-                    test_age(args,test_fairness_set,modelD,fairD_age,epoch,filter_set)
+                    test_gender(args, test_fairness_set, modelD, fairD_gender, epoch, filter_set)
+                    test_occupation(args, test_fairness_set, modelD, fairD_occupation, epoch, filter_set)
+                    test_age(args, test_fairness_set, modelD, fairD_age, epoch, filter_set)
 
-
-            print("epoch %d : test PMF Loss is %f " % (epoch, test_loss))
-            print("epoch %d : test H@5 is %f " % (epoch, test_hit))
-            print("epoch %d : test N@5 is %f " % (epoch, test_ndcg))
+                print("epoch %d : test PMF Loss is %f " % (epoch, test_loss))
+                print("epoch %d : test H@5 is %f " % (epoch, test_hit))
+                print("epoch %d : test N@5 is %f " % (epoch, test_ndcg))
 
             train_pmf(train_loader, epoch, args, modelD, optimizerD, \
                   fairD_set, optimizer_fairD_set, filter_set)
             gc.collect()
+
+        modelD.save(args.outname_base + 'D_final.pts')
+        if args.use_attr or args.use_gender_attr:
+            fairD_gender.save(args.outname_base + 'GenderFairD_final.pts')
+        if args.use_attr or args.use_occ_attr:
+            fairD_occupation.save(args.outname_base + 'OccupationFairD_final.pts')
+        if args.use_attr or args.use_age_attr:
+            fairD_age.save(args.outname_base + 'AgeFairD_final.pts')
+        if args.use_random_attr:
+            fairD_random.save(args.outname_base + 'RandomFairD_final.pts')
+
+        if args.sample_mask:
+            gender_filter.save(args.outname_base + 'GenderFilter.pts')
+            occupation_filter.save(args.outname_base + 'OccupationFilter.pts')
+            age_filter.save(args.outname_base + 'AgeFilter.pts')
+
+
+        if args.test_new_disc:
+            args.use_attr = True
+            ''' Training Fresh Discriminators'''
+            args.freeze_transD = True
+            attr_data = [args.users, args.movies]
+            freeze_model(modelD)
+            ''' Train Classifier '''
+            train_gender(args, modelD, train_fairness_set, test_fairness_set,attr_data, filter_set)
+            train_occupation(args, modelD, train_fairness_set, test_fairness_set,attr_data, filter_set)
+            train_age(args, modelD, train_fairness_set, test_fairness_set,attr_data, filter_set)
+            '''Test Fresh Discriminatots'''
+            test_gender(args, test_fairness_set, modelD, fairD_gender, epoch, filter_set)
+            test_occupation(args, test_fairness_set, modelD, fairD_occupation, epoch, filter_set)
+            test_age(args, test_fairness_set, modelD, fairD_age, epoch, filter_set)
+
 
 if __name__ == '__main__':
     main(parse_args())

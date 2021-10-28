@@ -136,19 +136,19 @@ def train_pmf(data_loader,counter,args,modelD,optimizerD,\
                             fairD_age_loss = fairD_loss.detach().cpu().numpy()
                             age_correct += l_correct
 
-        print("epoch %d : train PMF Loss is %f " % (idx, task_loss))
-        print("epoch %d : train H@5 is %f " % (idx, hit))
-        print("epoch %d : train N@5 is %f " % (idx, ndcg))
+        print("train PMF Loss is %f " % (task_loss))
+        print("train H@5 is %f " % (task_hit))
+        print("train N@5 is %f " % (task_ndcg))
 
     ''' Logging for end of epoch '''
     if not args.freeze_transD:
-        print(counter + ": Task Loss", float(full_loss))
+        print(": Task Loss", float(full_loss))
     if fairD_set[0] is not None:
-        print(counter + ": Fair Gender Disc Loss", float(fairD_gender_loss))
+        print(": Fair Gender Disc Loss", float(fairD_gender_loss))
     if fairD_set[1] is not None:
-        print(counter + "+ Fair Occupation Disc Loss", float(fairD_occupation_loss))
+        print("+ Fair Occupation Disc Loss", float(fairD_occupation_loss))
     if fairD_set[2] is not None:
-        print(counter + ": Fair Age Disc Loss", float(fairD_age_loss))
+        print(": Fair Age Disc Loss", float(fairD_age_loss))
 
 def train(data_loader, counter, args, modelD, optimizerD,\
          fairD_set, optimizer_fairD_set, filter_set):
