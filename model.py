@@ -112,12 +112,12 @@ class PMF(nn.Module):
                 r = []
                 test_items = np.random.randint(low=0, high=self.num_items, size=20)
                 test_items = test_items.tolist()
-                j = 0
+                '''j = 0
                 while j < len(test_items):
                     if test_items[j] in user_dict[str(test_list[i][0])]:
                         del test_items[j]
                     else:
-                        j += 1
+                        j += 1'''
                 test_items.append(test_list[i][2])
                 test_items_t = torch.LongTensor(test_items).cuda()
                 u = torch.tensor(test_list[i][0]).cuda()
