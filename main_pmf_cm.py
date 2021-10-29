@@ -196,11 +196,6 @@ def main(args):
                     if args.use_pmf:
                         test_loss, test_hit, test_ndcg = test_pmf(test_set,args,modelD,filter_set)
 
-                if args.use_attr:
-                    test_gender(args, test_fairness_set, modelD, fairD_gender, epoch, filter_set)
-                    test_occupation(args, test_fairness_set, modelD, fairD_occupation, epoch, filter_set)
-                    test_age(args, test_fairness_set, modelD, fairD_age, epoch, filter_set)
-
                 print("epoch %d : test PMF Loss is %f " % (epoch, test_loss))
                 print("epoch %d : test H@5 is %f " % (epoch, test_hit))
                 print("epoch %d : test N@5 is %f " % (epoch, test_ndcg))

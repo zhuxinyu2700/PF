@@ -127,11 +127,12 @@ class PMF(nn.Module):
                 score = R.cpu().detach().numpy().tolist()
                 item_score = dict(zip(test_items, score))
                 item_score = sorted(item_score.items(), key=lambda item: item[1], reverse=True)
-                item_score = dict(item_score[:5])
-                if test_list[i][2] in item_score.keys():
-                    r.append(1)
-                else:
-                    r.append(0)
+                item_score = item_score[:5]
+                for j in range(0, 5):
+                    if item_score[j][0] == test_list[i][2]:
+                        r.append(1)
+                    else:
+                        r.append(0)
                 hit += hit_at_k(r)
                 ndcg += ndcg_at_k(r, method=1)
             return loss, hit/len(test_list), ndcg/len(test_list)
