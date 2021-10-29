@@ -85,8 +85,7 @@ def test_gender(args,test_dataset,modelD,net,\
     print("Test Gender Accuracy is: %f AUC: %f F1: %f" %(acc,AUC,f1))
 
 
-def train_gender(args,modelD,train_dataset,test_dataset,\
-        attr_data,filter_set=None):
+def train_gender(args,modelD,train_dataset,test_dataset,attr_data,filter_set=None):
     modelD.eval()
     net = GenderDiscriminator(args.use_1M,args.embed_dim,attr_data,\
             'gender',use_cross_entropy=args.use_cross_entropy).to(args.device)
@@ -97,8 +96,6 @@ def train_gender(args,modelD,train_dataset,test_dataset,\
 
     for epoch in range(1,args.num_classifier_epochs + 1):
         correct = 0
-        if epoch % 10 == 0:
-            test_gender(args,test_dataset,modelD,net,epoch,filter_set)
         embs_list, labels_list = [], []
         for p_batch in train_loader:
             p_batch_var = Variable(p_batch).cuda()
@@ -120,10 +117,8 @@ def train_gender(args,modelD,train_dataset,test_dataset,\
                 labels_list.append(y)
             print("Train Gender Loss is %f Accuracy is: %f AUC: %f F1:%f"\
                     %(loss,acc,AUC,f1))
-
-
-    cat_labels_list = torch.cat(labels_list,0).data.cpu().numpy()
-    cat_embs_list = torch.cat(embs_list,0).data.cpu().numpy()
+        if epoch % 10 == 0:
+            test_gender(args,test_dataset,modelD,net,epoch,filter_set)
 
 
 def test_age(args,test_dataset,modelD,net,\
@@ -160,8 +155,6 @@ def train_age(args,modelD,train_dataset,test_dataset,attr_data,\
 
     for epoch in range(1,args.num_classifier_epochs+1):
         correct = 0
-        if epoch % 10 == 0:
-            test_age(args,test_dataset,modelD,net,epoch,filter_set)
         embs_list, labels_list = [], []
         for p_batch in train_loader:
             p_batch_var = Variable(p_batch).cuda()
@@ -181,9 +174,8 @@ def train_age(args,modelD,train_dataset,test_dataset,attr_data,\
                 labels_list.append(y)
             print("Train Age Loss is %f Accuracy is: %f AUC: %f F1: %f" \
                     %(loss,acc,AUC,f1))
-
-    cat_labels_list = torch.cat(labels_list,0).data.cpu().numpy()
-    cat_embs_list = torch.cat(embs_list,0).data.cpu().numpy()
+        if epoch % 10 == 0:
+            test_age(args,test_dataset,modelD,net,epoch,filter_set)
 
 
 def test_occupation(args,test_dataset,modelD,net,epoch,filter_set=None):
@@ -224,9 +216,6 @@ def train_occupation(args,modelD,train_dataset,test_dataset,\
 
     for epoch in range(1,args.num_classifier_epochs+1):
         correct = 0
-        if epoch % 10 == 0:
-            test_occupation(args,test_dataset,modelD,net,epoch,filter_set)
-        embs_list, labels_list = [], []
         for p_batch in train_loader:
             p_batch_var = Variable(p_batch).cuda()
             p_batch_emb = modelD.encode(p_batch_var.detach(),filter_set)
@@ -245,9 +234,9 @@ def train_occupation(args,modelD,train_dataset,test_dataset,\
                 labels_list.append(y)
             print("Train Occupation Loss is %f Accuracy is: %f AUC: %f F1: %f"\
                     %(loss,acc,AUC,f1))
-
-    cat_labels_list = torch.cat(labels_list,0).data.cpu().numpy()
-    cat_embs_list = torch.cat(embs_list,0).data.cpu().numpy()
+        if epoch % 10 == 0:
+            test_occupation(args, test_dataset, modelD, net, epoch, filter_set)
+        embs_list, labels_list = [], []
 
 
 def collate_fn(batch):
