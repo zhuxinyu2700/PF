@@ -120,7 +120,9 @@ class PMF(nn.Module):
                         j += 1
                 test_items.append(test_list[i][2])
                 test_items_t = torch.LongTensor(test_items).cuda()
-                u = torch.tensor(test_list[i][0]).cuda()
+                u_list = []
+                u_list.append(test_list[i][0])
+                u = torch.tensor(u_list).cuda()
                 user_embed = self.encode(u, filters)
                 test_items_embed = self.items_embed(test_items_t)
                 R = (user_embed * test_items_embed).sum(1)
