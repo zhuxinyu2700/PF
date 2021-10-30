@@ -265,4 +265,14 @@ def test_pmf(dataset, args, modelD,filter_set=None):
     test_ndcg = torch.mean(torch.stack(ndcg_list))
     return test_loss, test_hit, test_ndcg
 
+def validate_pmf(dataset, args, modelD,filter_set=None):
+    test_loader = DataLoader(dataset, batch_size=4000, num_workers=1, collate_fn=collate_fn)
+    data_itr = enumerate(test_loader)
 
+    test_loss_list = []
+    for idx, p_batch in data_itr:
+        p_batch_var = Variable(p_batch).cuda()
+        test_loss = modelD(p_batch_var,filters=filter_set)
+        test_loss_list.append(test_loss)
+    test_loss = torch.mean(torch.stack(test_loss_list))
+    return test_loss

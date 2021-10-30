@@ -59,8 +59,7 @@ def train_pmf(data_loader,counter,args,modelD,optimizerD,\
             masked_optimizer_fairD_set = optimizer_fairD_set
             masked_filter_set = filter_set
 
-        if args.use_cuda:
-            p_batch = p_batch.cuda()
+        p_batch = p_batch.cuda()
 
         p_batch_var = Variable(p_batch)
 
@@ -134,6 +133,139 @@ def train_pmf(data_loader,counter,args,modelD,optimizerD,\
                         elif fairD_disc.attribute == 'age':
                             fairD_age_loss = fairD_loss.detach().cpu().numpy()
                             age_correct = age_correct + l_correct
+
+        print("train PMF Loss is %f " % (task_loss))
+
+    ''' Logging for end of epoch '''
+    if not args.freeze_transD:
+        print(": Task Loss", float(full_loss))
+    if fairD_set[0] is not None:
+        print(": Fair Gender Disc Loss", float(fairD_gender_loss))
+    if fairD_set[1] is not None:
+        print("+ Fair Occupation Disc Loss", float(fairD_occupation_loss))
+    if fairD_set[2] is not None:
+        print(": Fair Age Disc Loss", float(fairD_age_loss))
+
+def train_pmf_sm(data_loader,counter,args,modelD,optimizerD,\
+        fairD_set, optimizer_fairD_set, filter_set):
+    fairD_gender_loss, fairD_occupation_loss, fairD_age_loss = 0, 0, 0
+
+    if args.show_tqdm:
+        data_itr = tqdm(enumerate(data_loader))
+    else:
+        data_itr = enumerate(data_loader)
+
+    for idx, p_batch in data_itr:
+        ''' Sample Fairness Discriminators '''
+        if args.sample_mask:
+            mask = np.random.choice([0, 1], size=(3,))
+            # filter_set = [gender_filter,occupation_filter,age_filter,ga_filter,go_filter,ao_filter,gao_filter]
+            # gender
+            if mask[0]==1 & mask[1]==0 & mask[2]==0:
+                mask = np.array([1,0,0,0,0,0,0])
+            # occupation
+            elif mask[0]==0 & mask[1]==1 & mask[2]==0:
+                mask = np.array([0,1,0,0,0,0,0])
+            # age
+            elif mask[0]==0 & mask[1]==0 & mask[2]==1:
+                mask = np.array([0,0,1,0,0,0,0])
+            # gender & age
+            elif mask[0]==1 & mask[1]==0 & mask[2]==1:
+                mask = np.array([0,0,0,1,0,0,0])
+            # gender & occupation
+            elif mask[0]==1 & mask[1]==1 & mask[2]==0:
+                mask = np.array([0,0,0,0,1,0,0])
+            # age & occupation
+            elif mask[0]==0 & mask[1]==1 & mask[2]==1:
+                mask = np.array([0,0,0,0,0,1,0])
+            elif mask[0]==1 & mask[1]==1 & mask[2]==1:
+                mask = np.array([0,0,0,0,0,0,1])
+            elif mask[0]==0 & mask[1]==0 & mask[2]==0:
+                mask = np.array([0,0,0,0,0,0,0])
+            masked_fairD_set = list(mask_fairDiscriminators(fairD_set, mask))
+            masked_optimizer_fairD_set = list(mask_fairDiscriminators(optimizer_fairD_set, mask))
+            masked_filter_set = list(mask_fairDiscriminators(filter_set, mask))
+        else:
+            ''' No mask applied despite the name '''
+            masked_fairD_set = fairD_set
+            masked_optimizer_fairD_set = optimizer_fairD_set
+            masked_filter_set = filter_set
+
+        if args.use_cuda:
+            p_batch = p_batch.cuda()
+
+        p_batch_var = Variable(p_batch)
+
+        ''' Number of Active Discriminators '''
+        constant = len(masked_fairD_set) - masked_fairD_set.count(None)
+
+
+        if constant != 0:
+            task_loss, lhs_emb, rhs_emb = modelD(p_batch_var, \
+                                                        return_embed=True, filters=masked_filter_set)
+            filter_l_emb = lhs_emb[:len(p_batch_var)]
+            l_penalty = 0
+
+            # ''' Apply Filter or Not to Embeddings '''
+            # filter_l_emb = apply_filters_gcmc(args,p_lhs_emb,masked_filter_set)
+
+            ''' Apply Discriminators '''
+            for fairD_disc, fair_optim in zip(masked_fairD_set, masked_optimizer_fairD_set):
+                if fairD_disc is not None and fair_optim is not None:
+                    l_penalty += fairD_disc(filter_l_emb, p_batch[:, 0], True)
+
+            if not args.use_cross_entropy:
+                fair_penalty = constant - l_penalty
+            else:
+                fair_penalty = -1 * l_penalty
+
+            if not args.freeze_transD:
+                optimizerD.zero_grad()
+                full_loss = task_loss + args.gamma * fair_penalty
+                full_loss.backward(retain_graph=False)
+                optimizerD.step()
+
+            for k in range(0, args.D_steps):
+                l_penalty_2 = 0
+                for fairD_disc, fair_optim in zip(masked_fairD_set, masked_optimizer_fairD_set):
+                    if fairD_disc is not None and fair_optim is not None:
+                        fair_optim.zero_grad()
+                        l_penalty_2 += fairD_disc(filter_l_emb.detach(), p_batch[:, 0], True)
+                        if not args.use_cross_entropy:
+                            fairD_loss = -1 * (1 - l_penalty_2)
+                        else:
+                            fairD_loss = l_penalty_2
+                        fairD_loss.backward(retain_graph=True)
+                        fair_optim.step()
+        else:
+            task_loss= modelD(p_batch_var)
+            fair_penalty = Variable(torch.zeros(1)).long()
+            optimizerD.zero_grad()
+            full_loss = task_loss + args.gamma * fair_penalty
+            full_loss.backward(retain_graph=False)
+            optimizerD.step()
+
+        if constant != 0:
+            gender_correct, occupation_correct, age_correct, random_correct = 0, 0, 0, 0
+            correct = 0
+            for fairD_disc in masked_fairD_set:
+                if fairD_disc is not None:
+                    ''' No Gradients Past Here '''
+                    with torch.no_grad():
+                        task_loss, lhs_emb, rhs_emb = modelD(p_batch_var,return_embed=True, filters=masked_filter_set)
+                        p_lhs_emb = lhs_emb[:len(p_batch)]
+                        filter_emb = p_lhs_emb
+                        probs, l_A_labels, l_preds = fairD_disc.predict(filter_emb, p_batch[:, 0], True)
+                        l_correct = l_preds.eq(l_A_labels.view_as(l_preds)).sum().item()
+                        if fairD_disc.attribute == 'gender':
+                            fairD_gender_loss = fairD_loss.detach().cpu().numpy()
+                            gender_correct += l_correct  #
+                        elif fairD_disc.attribute == 'occupation':
+                            fairD_occupation_loss = fairD_loss.detach().cpu().numpy()
+                            occupation_correct += l_correct
+                        elif fairD_disc.attribute == 'age':
+                            fairD_age_loss = fairD_loss.detach().cpu().numpy()
+                            age_correct += l_correct
 
         print("train PMF Loss is %f " % (task_loss))
 

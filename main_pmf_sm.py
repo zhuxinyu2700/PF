@@ -17,15 +17,18 @@ import logging
 import sys, os
 import subprocess
 from tqdm import tqdm
+
 tqdm.monitor_interval = 0
 from utils import *
 from preprocess_movie_lens import *
 from transD_movielens import *
 import joblib
 from collections import Counter, OrderedDict
+
 sys.path.append('../')
 import gc
 from model import *
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -42,7 +45,8 @@ def parse_args():
     parser.add_argument('--workspace', type=str, default=" ", help="Comet Workspace")
     parser.add_argument('--D_steps', type=int, default=10, help='Number of D steps')
     parser.add_argument('--num_epochs', type=int, default=100, help='Number of training epochs (default: 500)')
-    parser.add_argument('--num_classifier_epochs', type=int, default=100, help='Number of training epochs (default: 500)')
+    parser.add_argument('--num_classifier_epochs', type=int, default=100,
+                        help='Number of training epochs (default: 500)')
     parser.add_argument('--batch_size', type=int, default=1024, help='Batch size (default: 512)')
     parser.add_argument('--dropout_p', type=float, default=0.2, help='Batch size (default: 512)')
     parser.add_argument('--gamma', type=int, default=10, help='Tradeoff for Adversarial Penalty')
@@ -61,29 +65,31 @@ def parse_args():
     parser.add_argument('--use_pmf', type=bool, default=True, help='Use a PMF')
     parser.add_argument('--dont_train', action='store_true', help='Dont Do Train Loop')
     parser.add_argument('--sample_mask', type=bool, default=True, help='Sample a binary mask for discriminators to use')
-    parser.add_argument('--use_trained_filters', type=bool, default=False, help='Sample a binary mask for discriminators to use')
+    parser.add_argument('--use_trained_filters', type=bool, default=False,
+                        help='Sample a binary mask for discriminators to use')
     parser.add_argument('--optim_mode', type=str, default='adam', help='optimizer')
-    parser.add_argument('--namestr', type=str, default='', help='additional info in output filename to help identify experiments')
+    parser.add_argument('--namestr', type=str, default='',
+                        help='additional info in output filename to help identify experiments')
 
     args = parser.parse_args()
     args.use_cuda = torch.cuda.is_available()
     args.device = torch.device("cuda" if args.use_cuda else "cpu")
-    args.train_ratings,args.validation_ratings,args.test_ratings,args.users,args.movies = make_dataset_1M(True)
+    args.train_ratings, args.validation_ratings, args.test_ratings, args.users, args.movies = make_dataset_1M(True)
 
     args.num_users = int(np.max(args.users['user_id'])) + 1
     args.num_movies = int(np.max(args.movies['movie_id'])) + 1
     users = np.asarray(list(set(args.users['user_id'])))
     np.random.shuffle(users)
     cutoff_constant = 0.8
-    train_cutoff_row = int(np.round(len(users)*cutoff_constant))
+    train_cutoff_row = int(np.round(len(users) * cutoff_constant))
     args.cutoff_row = train_cutoff_row
     args.users_train = users[:train_cutoff_row]
     args.users_test = users[train_cutoff_row:]
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-    args.outname_base = os.path.join(args.save_dir,args.namestr+'_MovieLens_results')
-    args.saved_path = os.path.join(args.save_dir,args.namestr+'_MovieLens_resultsD_final.pts')
+    args.outname_base = os.path.join(args.save_dir, args.namestr + '_MovieLens_results')
+    args.saved_path = os.path.join(args.save_dir, args.namestr + '_MovieLens_resultsD_final.pts')
     args.gender_filter_saved_path = args.outname_base + 'GenderFilter.pts'
     args.occupation_filter_saved_path = args.outname_base + 'OccupationFilter.pts'
     args.age_filter_saved_path = args.outname_base + 'AgeFilter.pts'
@@ -95,6 +101,7 @@ def parse_args():
 
     ##############################################################
     return args
+
 
 def main(args):
     train_set = KBDataset(args.train_ratings, args.prefetch_to_gpu)
@@ -108,44 +115,48 @@ def main(args):
         modelD = PMF(args.num_users, args.num_movies, args.embed_dim, args.p).to(args.device)
 
     ''' Initialize Everything to None '''
-    fairD_gender, fairD_occupation, fairD_age, fairD_random = None,None,None,None
+    fairD_gender, fairD_occupation, fairD_age, fairD_random = None, None, None, None
     optimizer_fairD_gender, optimizer_fairD_occupation, \
-            optimizer_fairD_age, optimizer_fairD_random = None,None,None,None
+    optimizer_fairD_age, optimizer_fairD_random = None, None, None, None
     gender_filter, occupation_filter, age_filter = None, None, None
     if args.use_attr:
-        attr_data = [args.users,args.movies]
+        attr_data = [args.users, args.movies]
         ''' Initialize Discriminators '''
-        fairD_gender = GenderDiscriminator(args.use_1M,args.embed_dim,attr_data,\
-                'gender',use_cross_entropy=args.use_cross_entropy).to(args.device)
-        fairD_occupation = OccupationDiscriminator(args.use_1M,args.embed_dim,attr_data,\
-                attribute='occupation',use_cross_entropy=args.use_cross_entropy)
-        fairD_age = AgeDiscriminator(args.use_1M,args.embed_dim,attr_data,\
-                attribute='age',use_cross_entropy=args.use_cross_entropy)
+        fairD_gender = GenderDiscriminator(args.use_1M, args.embed_dim, attr_data, \
+                                           'gender', use_cross_entropy=args.use_cross_entropy).to(args.device)
+        fairD_occupation = OccupationDiscriminator(args.use_1M, args.embed_dim, attr_data, \
+                                                   attribute='occupation', use_cross_entropy=args.use_cross_entropy)
+        fairD_age = AgeDiscriminator(args.use_1M, args.embed_dim, attr_data, \
+                                     attribute='age', use_cross_entropy=args.use_cross_entropy)
 
         ''' Initialize Optimizers '''
         if args.sample_mask:
-            gender_filter = AttributeFilter(args.embed_dim,attribute='gender').to(args.device)
-            occupation_filter = AttributeFilter(args.embed_dim,attribute='occupation').to(args.device)
-            age_filter = AttributeFilter(args.embed_dim,attribute='age').to(args.device)
-            optimizer_fairD_gender = optimizer(fairD_gender.parameters(),'adam', args.lr)
-            optimizer_fairD_occupation = optimizer(fairD_occupation.parameters(),'adam',args.lr)
-            optimizer_fairD_age = optimizer(fairD_age.parameters(),'adam', args.lr)
+            gender_filter = AttributeFilter(args.embed_dim, attribute='gender').to(args.device)
+            occupation_filter = AttributeFilter(args.embed_dim, attribute='occupation').to(args.device)
+            age_filter = AttributeFilter(args.embed_dim, attribute='age').to(args.device)
+            ga_filter = AttributeFilter(args.embed_dim, attribute='gender&age').to(args.device)
+            go_filter = AttributeFilter(args.embed_dim, attribute='gender&occupation').to(args.device)
+            ao_filter = AttributeFilter(args.embed_dim, attribute='age&occupation').to(args.device)
+            gao_filter = AttributeFilter(args.embed_dim, attribute='gao').to(args.device)
+            optimizer_fairD_gender = optimizer(fairD_gender.parameters(), 'adam', args.lr)
+            optimizer_fairD_occupation = optimizer(fairD_occupation.parameters(), 'adam', args.lr)
+            optimizer_fairD_age = optimizer(fairD_age.parameters(), 'adam', args.lr)
 
     elif args.use_occ_attr:
-        attr_data = [args.users,args.movies]
-        fairD_occupation = OccupationDiscriminator(args.use_1M,args.embed_dim,attr_data,\
-                attribute='occupation',use_cross_entropy=args.use_cross_entropy)
-        optimizer_fairD_occupation = optimizer(fairD_occupation.parameters(),'adam',args.lr)
+        attr_data = [args.users, args.movies]
+        fairD_occupation = OccupationDiscriminator(args.use_1M, args.embed_dim, attr_data, \
+                                                   attribute='occupation', use_cross_entropy=args.use_cross_entropy)
+        optimizer_fairD_occupation = optimizer(fairD_occupation.parameters(), 'adam', args.lr)
     elif args.use_gender_attr:
-        attr_data = [args.users,args.movies]
-        fairD_gender = GenderDiscriminator(args.use_1M,args.embed_dim,attr_data,\
-                'gender',use_cross_entropy=args.use_cross_entropy)
-        optimizer_fairD_gender = optimizer(fairD_gender.parameters(),'adam', args.lr)
+        attr_data = [args.users, args.movies]
+        fairD_gender = GenderDiscriminator(args.use_1M, args.embed_dim, attr_data, \
+                                           'gender', use_cross_entropy=args.use_cross_entropy)
+        optimizer_fairD_gender = optimizer(fairD_gender.parameters(), 'adam', args.lr)
     elif args.use_age_attr:
-        attr_data = [args.users,args.movies]
-        fairD_age = AgeDiscriminator(args.use_1M,args.embed_dim,attr_data,\
-                attribute='age',use_cross_entropy=args.use_cross_entropy)
-        optimizer_fairD_age = optimizer(fairD_age.parameters(),'adam', args.lr)
+        attr_data = [args.users, args.movies]
+        fairD_age = AgeDiscriminator(args.use_1M, args.embed_dim, attr_data, \
+                                     attribute='age', use_cross_entropy=args.use_cross_entropy)
+        optimizer_fairD_age = optimizer(fairD_age.parameters(), 'adam', args.lr)
 
     if args.load_transD:
         modelD.load(args.saved_path)
@@ -156,27 +167,25 @@ def main(args):
         age_filter.load(args.age_filter_saved_path)
 
     ''' Create Sets '''
-    fairD_set = [fairD_gender,fairD_occupation,fairD_age]
-    filter_set = [gender_filter,occupation_filter,age_filter]
+    fairD_set = [fairD_gender, fairD_occupation, fairD_age]
+    filter_set = [gender_filter,occupation_filter,age_filter,ga_filter,go_filter,ao_filter,gao_filter]
     optimizer_fairD_set = [optimizer_fairD_gender, optimizer_fairD_occupation, optimizer_fairD_age]
 
     ''' Initialize CUDA if Available '''
     if args.use_cuda:
-        for fairD,filter_ in zip(fairD_set,filter_set):
+        for fairD, filter_ in zip(fairD_set, filter_set):
             if fairD is not None:
                 fairD.to(args.device)
             if filter_ is not None:
                 filter_.to(args.device)
 
-
     if args.sample_mask and not args.use_trained_filters:
         optimizerD = optimizer(list(modelD.parameters()) + \
-                list(gender_filter.parameters()) + \
-                list(occupation_filter.parameters()) + \
-                list(age_filter.parameters()), 'adam', args.lr)
+                               list(gender_filter.parameters()) + \
+                               list(occupation_filter.parameters()) + \
+                               list(age_filter.parameters()), 'adam', args.lr)
     else:
-         optimizerD = optimizer(modelD.parameters(), 'adam', args.lr)
-
+        optimizerD = optimizer(modelD.parameters(), 'adam', args.lr)
 
     if args.prefetch_to_gpu:
         train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, drop_last=True,
@@ -188,7 +197,6 @@ def main(args):
     if args.freeze_transD:
         freeze_model(modelD)
 
-
     ''' Joint Training '''
     if not args.dont_train:
         last_validation_loss = None
@@ -197,7 +205,7 @@ def main(args):
                 with torch.no_grad():
                     if args.use_pmf:
                         validation_loss, validaton_hit, validation_ndcg = test_pmf(validation_set,args,modelD,filter_set)
-                
+
 
                 test_gender(args, test_fairness_set, modelD, fairD_gender, epoch, filter_set)
                 test_occupation(args, test_fairness_set, modelD, fairD_occupation, epoch, filter_set)
@@ -208,26 +216,25 @@ def main(args):
                 print("epoch %d : test N@5 is %f " % (epoch, validation_ndcg))'''
 
             train_pmf(train_loader, epoch, args, modelD, optimizerD, \
-                  fairD_set, optimizer_fairD_set, filter_set)
-            if epoch % args.valid_freq == 0:
-                with torch.no_grad():
-                    if args.use_pmf:
-                        validation_loss = validate_pmf(validation_set, args, modelD, filter_set)
-                        print("validation loss is %f", validation_loss)
-                    if last_validation_loss and last_validation_loss < validation_loss:
-                        test_loss, test_hit, test_ndcg = test_pmf(test_set, args, modelD, filter_set)
+                      fairD_set, optimizer_fairD_set, filter_set)
+            with torch.no_grad():
+                if args.use_pmf:
+                    validation_loss = validate_pmf(validation_set, args, modelD, filter_set)
+                    print("validation loss is %f", validation_loss)
+                if last_validation_loss and last_validation_loss < validation_loss:
+                    test_loss, test_hit, test_ndcg = test_pmf(test_set, args, modelD, filter_set)
 
-                        test_gender(args, test_fairness_set, modelD, fairD_gender, epoch, filter_set)
-                        test_occupation(args, test_fairness_set, modelD, fairD_occupation, epoch, filter_set)
-                        test_age(args, test_fairness_set, modelD, fairD_age, epoch, filter_set)
+                    test_gender(args, test_fairness_set, modelD, fairD_gender, epoch, filter_set)
+                    test_occupation(args, test_fairness_set, modelD, fairD_occupation, epoch, filter_set)
+                    test_age(args, test_fairness_set, modelD, fairD_age, epoch, filter_set)
 
-                        print("epoch %d : test PMF Loss is %f " % (epoch, test_loss))
-                        print("epoch %d : test H@5 is %f " % (epoch, test_hit))
-                        print("epoch %d : test N@5 is %f " % (epoch, test_ndcg))
-                        gc.collect()
-                        break
-                    else:
-                        last_validation_loss = validation_loss
+                    print("epoch %d : test PMF Loss is %f " % (epoch, test_loss))
+                    print("epoch %d : test H@5 is %f " % (epoch, test_hit))
+                    print("epoch %d : test N@5 is %f " % (epoch, test_ndcg))
+                    gc.collect()
+                    break
+                else:
+                    last_validation_loss = validation_loss
             gc.collect()
 
         modelD.save(args.outname_base + 'D_final.pts')
@@ -237,11 +244,15 @@ def main(args):
             fairD_occupation.save(args.outname_base + 'OccupationFairD_final.pts')
         if args.use_attr or args.use_age_attr:
             fairD_age.save(args.outname_base + 'AgeFairD_final.pts')
-
         if args.sample_mask:
             gender_filter.save(args.outname_base + 'GenderFilter.pts')
             occupation_filter.save(args.outname_base + 'OccupationFilter.pts')
             age_filter.save(args.outname_base + 'AgeFilter.pts')
+            ga_filter.save(args.outname_base + 'Gender&AgeFilter.pts')
+            go_filter.save(args.outname_base + 'Gender&OccupationFilter.pts')
+            ao_filter.save(args.outname_base + 'Age&occupationFilter.pts')
+            gao_filter.save(args.outname_base + 'GAOFilter.pts')
+
 
     if args.test_new_disc:
         args.use_attr = True
