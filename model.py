@@ -25,7 +25,7 @@ def apply_filters(emb, masked_filter_set):
     filter_embed = 0
     for filter_ in masked_filter_set:
         if filter_ is not None:
-            filter_embed += filter_(emb)
+            filter_embed = filter_embed + filter_(emb)
     return filter_embed
 
 def dcg_at_k(r, method=1):
@@ -117,7 +117,7 @@ class PMF(nn.Module):
                     if test_items[j] in user_dict[str(test_list[i][0])]:
                         del test_items[j]
                     else:
-                        j += 1
+                        j = j + 1
                 test_items.append(test_list[i][2])
                 test_items_t = torch.LongTensor(test_items).cuda()
                 u_list = []
@@ -135,10 +135,42 @@ class PMF(nn.Module):
                         r.append(1)
                     else:
                         r.append(0)
-                hit += hit_at_k(r)
-                ndcg += ndcg_at_k(r, method=1)
+                hit = hit + hit_at_k(r)
+                ndcg = ndcg + ndcg_at_k(r, method=1)
             return loss, hit/len(test_list), ndcg/len(test_list)
-        else:
+        elif return_embed and not return_nh:
+            test_list = batch.cpu().numpy().tolist()
+            hit = 0
+            ndcg = 0
+            for i in range(len(test_list)):
+                r = []
+                test_items = np.random.randint(low=0, high=self.num_items, size=100)
+                test_items = test_items.tolist()
+                j = 0
+                while j < len(test_items):
+                    if test_items[j] in user_dict[str(test_list[i][0])]:
+                        del test_items[j]
+                    else:
+                        j = j + 1
+                test_items.append(test_list[i][2])
+                test_items_t = torch.LongTensor(test_items).cuda()
+                u_list = []
+                u_list.append(test_list[i][0])
+                u = torch.tensor(u_list).cuda()
+                user_embed = self.encode(u, filters)
+                test_items_embed = self.items_embed(test_items_t)
+                R = (user_embed * test_items_embed).sum(1)
+                score = R.cpu().detach().numpy().tolist()
+                item_score = dict(zip(test_items, score))
+                item_score = sorted(item_score.items(), key=lambda item: item[1], reverse=True)
+                item_score = item_score[:5]
+                for j in range(0, 5):
+                    if item_score[j][0] == test_list[i][2]:
+                        r.append(1)
+                    else:
+                        r.append(0)
+                hit = hit + hit_at_k(r)
+                ndcg = ndcg + ndcg_at_k(r, method=1)
             return loss, users_embed, items_embed
 
     def get_embed(self, users, filters=None):
@@ -384,7 +416,8 @@ class AttributeFilter(nn.Module):
     def forward(self, ents_emb):
         h1 = F.leaky_relu(self.W1(ents_emb))
         h2 = F.leaky_relu(self.W2(h1))
-        h2 = self.batchnorm(h2)
+        if len(h2) > 1:
+            h2 = self.batchnorm(h2)
         return h2
 
     def save(self, fn):

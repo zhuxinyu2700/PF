@@ -222,17 +222,16 @@ def main(args):
             occupation_filter.save(args.outname_base + 'OccupationFilter.pts')
             age_filter.save(args.outname_base + 'AgeFilter.pts')
 
-
-        if args.test_new_disc:
-            args.use_attr = True
-            ''' Training Fresh Discriminators'''
-            args.freeze_transD = True
-            attr_data = [args.users, args.movies]
-            freeze_model(modelD)
-            ''' Train Classifier '''
-            train_gender(args, modelD, train_fairness_set, test_fairness_set,attr_data, filter_set)
-            train_occupation(args, modelD, train_fairness_set, test_fairness_set,attr_data, filter_set)
-            train_age(args, modelD, train_fairness_set, test_fairness_set,attr_data, filter_set)
+    if args.test_new_disc:
+        args.use_attr = True
+        ''' Training Fresh Discriminators'''
+        args.freeze_transD = True
+        attr_data = [args.users, args.movies]
+        freeze_model(modelD)
+        ''' Train Classifier '''
+        train_gender(args, modelD, train_fairness_set, test_fairness_set, attr_data, filter_set)
+        train_occupation(args, modelD, train_fairness_set, test_fairness_set, attr_data, filter_set)
+        train_age(args, modelD, train_fairness_set, test_fairness_set, attr_data, filter_set)
 
 
 if __name__ == '__main__':

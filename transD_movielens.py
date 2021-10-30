@@ -69,8 +69,7 @@ def train_pmf(data_loader,counter,args,modelD,optimizerD,\
 
         ''' Update GCMC Model '''
         if constant != 0:
-            task_loss, task_hit, task_ndcg, users_embed, items_embed = modelD(p_batch_var, \
-                                                        return_embeds=True, filters=masked_filter_set)
+            task_loss, lhs_emb, rhs_emb = modelD(p_batch_var,return_embed=True, filters=masked_filter_set)
             filter_l_emb = lhs_emb[:len(p_batch_var)]
             l_penalty = 0
 
@@ -80,7 +79,7 @@ def train_pmf(data_loader,counter,args,modelD,optimizerD,\
             ''' Apply Discriminators '''
             for fairD_disc, fair_optim in zip(masked_fairD_set, masked_optimizer_fairD_set):
                 if fairD_disc is not None and fair_optim is not None:
-                    l_penalty += fairD_disc(filter_l_emb, p_batch[:, 0], True)
+                    l_penalty = l_penalty + fairD_disc(filter_l_emb, p_batch[:, 0], True)
 
             if not args.use_cross_entropy:
                 fair_penalty = constant - l_penalty
@@ -98,7 +97,7 @@ def train_pmf(data_loader,counter,args,modelD,optimizerD,\
                 for fairD_disc, fair_optim in zip(masked_fairD_set, masked_optimizer_fairD_set):
                     if fairD_disc is not None and fair_optim is not None:
                         fair_optim.zero_grad()
-                        l_penalty_2 += fairD_disc(filter_l_emb.detach(), p_batch[:, 0], True)
+                        l_penalty_2 = l_penalty_2 + fairD_disc(filter_l_emb.detach(), p_batch[:, 0], True)
                         if not args.use_cross_entropy:
                             fairD_loss = -1 * (1 - l_penalty_2)
                         else:
@@ -106,7 +105,7 @@ def train_pmf(data_loader,counter,args,modelD,optimizerD,\
                         fairD_loss.backward(retain_graph=True)
                         fair_optim.step()
         else:
-            task_loss, task_hit, task_ndcg = modelD(p_batch_var,return_nh=True)
+            task_loss= modelD(p_batch_var)
             fair_penalty = Variable(torch.zeros(1)).cuda()
             optimizerD.zero_grad()
             full_loss = task_loss + args.gamma * fair_penalty
@@ -120,25 +119,23 @@ def train_pmf(data_loader,counter,args,modelD,optimizerD,\
                 if fairD_disc is not None:
                     ''' No Gradients Past Here '''
                     with torch.no_grad():
-                        task_loss, preds, lhs_emb, rhs_emb = modelD(p_batch_var, \
-                                                                    return_embeds=True, filters=masked_filter_set)
+                        task_loss, lhs_emb, rhs_emb = modelD(p_batch_var, \
+                                                                    return_embed=True, filters=masked_filter_set)
                         p_lhs_emb = lhs_emb[:len(p_batch)]
                         filter_emb = p_lhs_emb
                         probs, l_A_labels, l_preds = fairD_disc.predict(filter_emb, p_batch[:, 0], True)
                         l_correct = l_preds.eq(l_A_labels.view_as(l_preds)).sum().item()
                         if fairD_disc.attribute == 'gender':
                             fairD_gender_loss = fairD_loss.detach().cpu().numpy()
-                            gender_correct += l_correct  #
+                            gender_correct = gender_correct + l_correct  #
                         elif fairD_disc.attribute == 'occupation':
                             fairD_occupation_loss = fairD_loss.detach().cpu().numpy()
-                            occupation_correct += l_correct
+                            occupation_correct = occupation_correct+l_correct
                         elif fairD_disc.attribute == 'age':
                             fairD_age_loss = fairD_loss.detach().cpu().numpy()
-                            age_correct += l_correct
+                            age_correct = age_correct + l_correct
 
         print("train PMF Loss is %f " % (task_loss))
-        print("train H@5 is %f " % (task_hit))
-        print("train N@5 is %f " % (task_ndcg))
 
     ''' Logging for end of epoch '''
     if not args.freeze_transD:

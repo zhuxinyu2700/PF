@@ -50,7 +50,7 @@ def test_random(args,test_dataset,modelD,net,\
         p_batch_emb = modelD.encode(p_batch_var.detach(),filter_set)
         y_hat, y = net.predict(p_batch_emb,p_batch_var)
         preds = (y_hat > torch.Tensor([0.5]).cuda()).float() * 1
-        correct += preds.eq(y.view_as(preds)).sum().item()
+        correct = correct + preds.eq(y.view_as(preds)).sum().item()
         preds_list.append(preds)
         probs_list.append(y_hat)
         labels_list.append(y)
@@ -72,7 +72,7 @@ def test_gender(args,test_dataset,modelD,net,\
         p_batch_emb = modelD.encode(p_batch_var.detach(),filter_set)
         y_hat, y = net.predict(p_batch_emb,p_batch_var)
         preds = (y_hat > torch.Tensor([0.5]).cuda()).float() * 1
-        correct += preds.eq(y.view_as(preds)).sum().item()
+        correct = correct + preds.eq(y.view_as(preds)).sum().item()
         preds_list.append(preds)
         probs_list.append(y_hat)
         labels_list.append(y)
@@ -131,7 +131,7 @@ def test_age(args,test_dataset,modelD,net,\
         p_batch_emb = modelD.encode(p_batch_var.detach(),filter_set)
         y_hat, y = net.predict(p_batch_emb,p_batch_var)
         preds = y_hat.max(1, keepdim=True)[1] # get the index of the max
-        correct += preds.eq(y.view_as(preds)).sum().item()
+        correct = correct + preds.eq(y.view_as(preds)).sum().item()
         preds_list.append(preds)
         probs_list.append(y_hat)
         labels_list.append(y)
@@ -187,7 +187,7 @@ def test_occupation(args,test_dataset,modelD,net,epoch,filter_set=None):
         p_batch_emb = modelD.encode(p_batch_var.detach(),filter_set)
         y_hat, y = net.predict(p_batch_emb,p_batch_var)
         preds = y_hat.max(1, keepdim=True)[1] # get the index of the max
-        correct += preds.eq(y.view_as(preds)).sum().item()
+        correct = correct + preds.eq(y.view_as(preds)).sum().item()
         probs_list.append(y_hat)
         preds_list.append(preds)
         labels_list.append(y)
